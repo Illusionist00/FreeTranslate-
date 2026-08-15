@@ -24,7 +24,7 @@
   const style = document.createElement('style');
   style.textContent = `
     .ft-sub-overlay { position: absolute; left: 0; right: 0; text-align: center; color: #ffe97a; font-family: "YouTube Noto", Roboto, Arial, sans-serif; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9); pointer-events: none; z-index: 25; white-space: normal; line-height: 1.35; display: none; }
-    .ft-yt-btn { color: #fff !important; font-size: 19px; font-weight: 700; }
+    .ft-yt-btn { color: #fff !important; font-size: 18px; font-weight: 700; width: 46px; height: 100%; display: inline-flex !important; align-items: center; justify-content: center; line-height: 1; padding: 0 !important; margin: 0 !important; border: none; background: none; vertical-align: middle; }
     .ft-yt-btn.ft-sub-on { color: #3ea6ff !important; }
     .ytp-autohide .ft-yt-popup { display: none !important; }
     .ft-yt-popup { position: absolute; right: 16px; bottom: 56px; z-index: 72; width: 240px; display: none; padding: 10px 12px; background: rgba(28, 28, 28, 0.95); border-radius: 12px; color: #f1f1f1; font-family: Roboto, Arial, "Microsoft YaHei", sans-serif; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5); }
