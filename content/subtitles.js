@@ -170,22 +170,29 @@
   }
 
   function ensureButton() {
-    if (ytBtn && ytBtn.isConnected) { updateBtnState(); return; }
-    const controls = document.querySelector('.ytp-right-controls');
-    if (!controls) return;
-    ytBtn = document.createElement('button');
-    ytBtn.className = 'ytp-button ft-yt-btn';
-    ytBtn.textContent = '译';
-    ytBtn.setAttribute('aria-label', 'FreeTranslate 字幕翻译');
-    ytBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      e.preventDefault();
-      togglePopup();
-    });
-    const settingsBtn = controls.querySelector('.ytp-settings-button');
-    if (settingsBtn) controls.insertBefore(ytBtn, settingsBtn);
-    else controls.appendChild(ytBtn);
-    updateBtnState();
+    try {
+      if (ytBtn && ytBtn.isConnected) { updateBtnState(); return; }
+      const controls = document.querySelector('.ytp-right-controls');
+      if (!controls) return;
+      ytBtn = document.createElement('button');
+      ytBtn.className = 'ytp-button ft-yt-btn';
+      ytBtn.textContent = '译';
+      ytBtn.setAttribute('aria-label', 'FreeTranslate 字幕翻译');
+      ytBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        e.preventDefault();
+        togglePopup();
+      });
+      const leftCluster = controls.querySelector('.ytp-right-controls-left');
+      if (leftCluster) {
+        const settingsBtn = leftCluster.querySelector('.ytp-settings-button');
+        if (settingsBtn) leftCluster.insertBefore(ytBtn, settingsBtn);
+        else leftCluster.appendChild(ytBtn);
+      } else {
+        controls.appendChild(ytBtn);
+      }
+      updateBtnState();
+    } catch (e) {}
   }
 
   function buildPopup() {
