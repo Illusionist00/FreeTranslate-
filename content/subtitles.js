@@ -73,6 +73,81 @@
   let stabTimer = null;
   let ytBtn = null;
   let ytPopup = null;
+  let nativeActive = false;
+
+  function baseLang(code) {
+    return String(code || '').toLowerCase().split('-')[0];
+  }
+
+  function langOf(url) {
+    try {
+      return (new URL(url).searchParams.get('lang') || '').toLowerCase();
+    } catch (e) {
+      return '';
+    }
+  }
+
+  async function translateBatch(texts) {
+    const out = new Array(texts.length).fill('');
+    const CHUNK = 40;
+    let ci = 0;
+    const worker = async () => {
+      while (ci < texts.length) {
+        const i = ci;
+        ci += CHUNK;
+        const slice = texts.slice(i, i + CHUNK);
+        try {
+          const tr = await sendTranslate(slice);
+          slice.forEach((t, j) => { out[i + j] = (tr && tr[j]) || ''; });
+        } catch (e) {}
+      }
+    };
+    await Promise.all(Array.from({ length: 3 }, worker));
+    return out;
+  }
+
+  function replySubReq(id, text) {
+    window.postMessage({ __ft: 'sub-res', id, text }, '*');
+  }
+
+  async function handleSubRequest(id, url) {
+    try {
+      const trackLang = langOf(url);
+      if (trackLang && baseLang(trackLang) === baseLang(settings.targetLang)) {
+        replySubReq(id, null);
+        return;
+      }
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('http ' + res.status);
+      const data = await res.json();
+      if (!data || !Array.isArray(data.events)) throw new Error('not json3');
+      const cues = [];
+      data.events.forEach(ev => {
+        const t = (ev.segs || []).map(s => s.utf8 || '').join('\n');
+        if (t.trim()) cues.push(t);
+      });
+      if (!cues.length) throw new Error('no cues');
+      const translations = await translateBatch(cues);
+      let ti = 0;
+      data.events.forEach(ev => {
+        const t = (ev.segs || []).map(s => s.utf8 || '').join('\n');
+        if (!t.trim()) return;
+        const tr = translations[ti++];
+        if (!tr) return;
+        ev.segs = [{ utf8: settings.subPosition === 'above' ? tr + '\n' + t : t + '\n' + tr }];
+      });
+      nativeActive = true;
+      hideOverlay();
+      replySubReq(id, JSON.stringify(data));
+    } catch (e) {
+      replySubReq(id, null);
+    }
+  }
+
+  window.addEventListener('message', e => {
+    if (e.source !== window || !e.data || e.data.__ft !== 'sub-req') return;
+    handleSubRequest(e.data.id, e.data.url);
+  });
 
   function getContainer() {
     return document.querySelector('.ytp-caption-window-container');
@@ -137,6 +212,7 @@
 
   function tick() {
     ensureButton();
+    if (nativeActive) return;
     if (!settings.subtitleEnabled) { hideOverlay(); return; }
     const segs = getVisibleSegments();
     const text = getVisibleText();
