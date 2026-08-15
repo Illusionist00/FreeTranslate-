@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>FreeTranslate 设置</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <h1>FreeTranslate 设置</h1>
+
+    <section>
+      <h2>翻译</h2>
+      <div class="field">
+        <label for="targetLang">目标语言</label>
+        <select id="targetLang"></select>
+      </div>
+      <div class="field">
+        <span>翻译引擎</span>
+        <div class="radios">
+          <label><input type="radio" name="engine" value="google"> Google（免费，推荐）</label>
+          <label><input type="radio" name="engine" value="bing"> Bing（免费）</label>
+        </div>
+      </div>
+      <div class="field">
+        <label for="chk-title"><input type="checkbox" id="chk-title"> 翻译网页标题</label>
+      </div>
+    </section>
+
+    <section>
+      <h2>交互</h2>
+      <div class="field">
+        <label for="chk-hover"><input type="checkbox" id="chk-hover"> 悬停翻译（按住按键悬停单词）</label>
+      </div>
+      <div class="field">
+        <label for="hoverKey">悬停按键</label>
+        <select id="hoverKey">
+          <option value="Ctrl">Ctrl</option>
+          <option value="Alt">Alt</option>
+          <option value="Shift">Shift</option>
+          <option value="None">无需按键</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="chk-selection"><input type="checkbox" id="chk-selection"> 划词翻译（选中文字显示"译"按钮）</label>
+      </div>
+      <div class="field">
+        <label for="chk-input"><input type="checkbox" id="chk-input"> 输入框翻译（连续按 3 次空格）</label>
+      </div>
+      <div class="field">
+        <label for="chk-subtitle"><input type="checkbox" id="chk-subtitle"> YouTube 双语字幕翻译</label>
+      </div>
+      <div class="field">
+        <label for="chk-ball"><input type="checkbox" id="chk-ball"> 显示悬浮球（页面右侧可拖拽）</label>
+      </div>
+    </section>
+
+    <section>
+      <h2>站点规则</h2>
+      <div class="field">
+        <label for="autoSites">始终翻译这些站点（每行一个域名，支持 * 通配）</label>
+        <textarea id="autoSites" rows="4" placeholder="github.com&#10;*.wikipedia.org"></textarea>
+      </div>
+      <div class="field">
+        <label for="neverSites">永不翻译这些站点</label>
+        <textarea id="neverSites" rows="4" placeholder="*.example.com"></textarea>
+      </div>
+    </section>
+
+    <div class="save-row">
+      <button id="btn-save" class="primary">保存</button>
+      <button id="btn-clear-cache">清空翻译缓存</button>
+      <span id="save-status"></span>
+    </div>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>

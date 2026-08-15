@@ -1,0 +1,72 @@
+{
+  "manifest_version": 3,
+  "name": "FreeTranslate 免费双语翻译",
+  "description": "开源免费的网页双语翻译扩展：整页双语对照、悬停翻译、划词翻译、输入框翻译、YouTube 双语字幕。无需登录、无会员、无配额。",
+  "version": "0.2.1",
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  "action": {
+    "default_title": "FreeTranslate",
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/16.png",
+      "32": "icons/32.png",
+      "48": "icons/48.png",
+      "128": "icons/128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_page": "options/options.html",
+  "permissions": [
+    "storage",
+    "contextMenus",
+    "notifications",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>",
+    "https://translate.googleapis.com/*",
+    "https://www.bing.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content/main.js"],
+      "css": ["content/styles.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content/tools.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://*.youtube.com/*"],
+      "js": ["content/subtitles.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "commands": {
+    "toggle-translate-page": {
+      "suggested_key": { "default": "Alt+A" },
+      "description": "翻译/恢复当前网页"
+    },
+    "toggle-only-translation": {
+      "suggested_key": { "default": "Alt+W" },
+      "description": "切换 双语对照/仅译文 模式"
+    },
+    "translate-input": {
+      "suggested_key": { "default": "Alt+I" },
+      "description": "翻译当前输入框内容"
+    },
+    "toggle-hover": {
+      "description": "开关悬停翻译"
+    }
+  }
+}

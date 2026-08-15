@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="header">
+    <img src="../icons/48.png" class="logo" alt="">
+    <div class="title">FreeTranslate</div>
+    <a href="#" id="open-options">设置</a>
+  </div>
+  <div id="status" class="status">加载中…</div>
+  <div class="actions">
+    <button id="btn-translate" class="primary">翻译本页</button>
+    <button id="btn-restore">恢复原文</button>
+  </div>
+  <div class="row">
+    <span>显示模式</span>
+    <select id="mode-select">
+      <option value="bilingual">双语对照</option>
+      <option value="only">仅译文</option>
+      <option value="original">原文</option>
+    </select>
+  </div>
+  <div class="checks">
+    <label><input type="checkbox" id="chk-always"> 始终翻译此站点</label>
+    <label><input type="checkbox" id="chk-never"> 永不翻译此站点</label>
+    <label><input type="checkbox" id="chk-subtitle"> YouTube 字幕翻译</label>
+  </div>
+  <div class="footer">
+    目标语言: <span id="lang-label">zh-CN</span> · 引擎: <span id="engine-label">Google</span>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
