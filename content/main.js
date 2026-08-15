@@ -629,7 +629,7 @@
     tLabel.className = 'ft-panel-label';
     tLabel.textContent = '功能开关';
     secToggles.appendChild(tLabel);
-    for (const [key, label] of [['hoverEnabled', '悬停翻译'], ['selectionEnabled', '划词翻译'], ['inputTripleSpace', '输入框翻译'], ['subtitleEnabled', '字幕翻译']]) {
+    for (const [key, label] of [['hoverEnabled', '悬停翻译'], ['selectionEnabled', '划词翻译'], ['inputTripleSpace', '输入框翻译']]) {
       const row = document.createElement('label');
       row.className = 'ft-panel-toggle';
       const cb = document.createElement('input');
@@ -639,7 +639,6 @@
         data[key] = cb.checked;
         chrome.storage.sync.set(data);
         if (key === 'hoverEnabled') hoverEnabled = cb.checked;
-        if (key === 'subtitleEnabled') settings.subtitleEnabled = cb.checked;
       });
       row.append(cb, document.createTextNode(label));
       secToggles.appendChild(row);
