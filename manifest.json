@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "FreeTranslate 免费双语翻译",
   "description": "开源免费的网页双语翻译扩展：整页双语对照、悬停翻译、划词翻译、输入框翻译、YouTube 双语字幕。无需登录、无会员、无配额。",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "icons": {
     "16": "icons/16.png",
     "32": "icons/32.png",

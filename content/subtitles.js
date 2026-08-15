@@ -15,7 +15,7 @@
   });
 
   const style = document.createElement('style');
-  style.textContent = '.ft-sub { color: #ffe97a !important; }';
+  style.textContent = '.ft-sub-overlay { position: absolute; left: 0; right: 0; text-align: center; color: #ffe97a; font-family: "YouTube Noto", Roboto, Arial, sans-serif; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9); pointer-events: none; z-index: 25; white-space: normal; line-height: 1.35; display: none; }';
   document.documentElement.appendChild(style);
 
   function sendTranslate(texts) {
@@ -44,32 +44,98 @@
     }
   }
 
-  function processSegments() {
-    if (!settings.subtitleEnabled) return;
-    const segs = document.querySelectorAll('.ytp-caption-segment:not([data-ft-sub])');
-    for (const seg of segs) {
-      seg.setAttribute('data-ft-sub', '1');
-      const text = (seg.textContent || '').replace(/\s+/g, ' ').trim();
-      if (!text) continue;
+  let overlay = null;
+  let lastTickText = '';
+  let shownSource = '';
+  let stabTimer = null;
+
+  function getContainer() {
+    return document.querySelector('.ytp-caption-window-container');
+  }
+
+  function getVisibleSegments() {
+    const out = [];
+    const segs = document.querySelectorAll('.ytp-caption-segment');
+    for (const s of segs) {
+      const r = s.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) out.push(s);
+    }
+    return out;
+  }
+
+  function getVisibleText() {
+    return getVisibleSegments()
+      .map(s => (s.textContent || '').replace(/\s+/g, ' ').trim())
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  function ensureOverlay() {
+    const container = getContainer();
+    if (!container) return null;
+    if (overlay && overlay.parentElement === container) return overlay;
+    if (overlay) overlay.remove();
+    overlay = document.createElement('div');
+    overlay.className = 'ft-sub-overlay';
+    container.appendChild(overlay);
+    return overlay;
+  }
+
+  function showOverlay(text, segs) {
+    const o = ensureOverlay();
+    if (!o) return;
+    o.textContent = text;
+    const c = o.parentElement.getBoundingClientRect();
+    let maxBottom = c.top;
+    for (const s of segs) {
+      const r = s.getBoundingClientRect();
+      if (r.bottom > maxBottom) maxBottom = r.bottom;
+    }
+    o.style.top = Math.max(0, maxBottom - c.top + 6) + 'px';
+    if (segs.length) {
+      const fs = parseFloat(getComputedStyle(segs[0]).fontSize);
+      if (fs) o.style.fontSize = (fs * 0.9) + 'px';
+    }
+    o.style.display = 'block';
+  }
+
+  function hideOverlay() {
+    if (overlay) overlay.style.display = 'none';
+  }
+
+  function tick() {
+    if (!settings.subtitleEnabled) { hideOverlay(); return; }
+    const segs = getVisibleSegments();
+    const text = getVisibleText();
+    if (!text) {
+      hideOverlay();
+      lastTickText = '';
+      shownSource = '';
+      clearTimeout(stabTimer);
+      return;
+    }
+    if (text !== lastTickText) {
+      lastTickText = text;
+      clearTimeout(stabTimer);
+      stabTimer = setTimeout(tick, 350);
+      return;
+    }
+    if (text !== shownSource) {
       translateCached(text).then(tr => {
-        if (!tr || !seg.isConnected) return;
-        if (seg.querySelector('.ft-sub')) return;
-        const br = document.createElement('br');
-        const span = document.createElement('span');
-        span.className = 'ft-sub';
-        span.textContent = tr;
-        seg.appendChild(br);
-        seg.appendChild(span);
+        if (!tr || !settings.subtitleEnabled) return;
+        if (text !== getVisibleText()) return;
+        showOverlay(tr, getVisibleSegments());
+        shownSource = text;
       });
     }
   }
 
-  let timer = null;
+  let moTimer = null;
   const mo = new MutationObserver(() => {
-    clearTimeout(timer);
-    timer = setTimeout(processSegments, 250);
+    clearTimeout(moTimer);
+    moTimer = setTimeout(tick, 120);
   });
   mo.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
-  setInterval(processSegments, 3000);
-  processSegments();
+  setInterval(tick, 800);
+  tick();
 })();
