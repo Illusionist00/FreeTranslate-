@@ -76,8 +76,47 @@
   let lastCueKey = '';
 
   const cueMap = [];
+  const groups = [];
   let trackReady = false;
   let trackBusy = false;
+  let waveIdx = 0;
+  let translating = false;
+
+  async function translateGroups(indices) {
+    let ci = 0;
+    const worker = async () => {
+      while (ci < indices.length) {
+        const g = groups[indices[ci++]];
+        
+        const texts = g.map(c => c.text);
+        try {
+          const tr = await sendTranslate(texts);
+          g.forEach((c, j) => { c.trans = (tr && tr[j]) || ''; });
+        } catch (e) {}
+      }
+    };
+    await Promise.all(Array.from({ length: 2 }, worker));
+  }
+
+  function translateUntil(timeMs) {
+    
+    if (translating) return;
+    const until = timeMs + 60000;
+    const indices = [];
+    while (waveIdx < groups.length) {
+      const g = groups[waveIdx];
+      const gStart = Math.min(...g.map(c => c.start));
+      if (gStart > until) break;
+      indices.push(waveIdx);
+      waveIdx++;
+    }
+    if (!indices.length) return;
+    translating = true;
+    translateGroups(indices).then(() => {
+      translating = false;
+      renderCue();
+    });
+  }
 
   function baseLang(code) {
     return String(code || '').toLowerCase().split('-')[0];
@@ -109,54 +148,48 @@
     return out;
   }
 
-  function ensureOverlay() {
-    const container = getContainer();
-    if (!container) return null;
-    if (overlay && overlay.parentElement === container) return overlay;
+  function attachOverlay() {
+    const player = getPlayer();
+    if (!player) return null;
+    if (overlay && overlay.parentElement === player) return overlay;
     if (overlay) overlay.remove();
     overlay = document.createElement('div');
     overlay.className = 'ft-sub-overlay';
-    container.appendChild(overlay);
+    overlay.style.top = 'auto';
+    overlay.style.bottom = '24px';
+    player.appendChild(overlay);
     return overlay;
   }
 
   function showOverlay(text, segs, playerAnchor) {
-    let o = overlay;
-    if (playerAnchor) {
-      const player = getPlayer();
-      if (!player) return;
-      if (!(overlay && overlay.parentElement === player)) {
-        if (overlay) overlay.remove();
-        overlay = document.createElement('div');
-        overlay.className = 'ft-sub-overlay';
-        overlay.style.top = 'auto';
-        overlay.style.bottom = '24px';
-        player.appendChild(overlay);
-      }
-      o = overlay;
-    } else {
-      o = ensureOverlay();
-      if (!o) return;
-      o.style.bottom = 'auto';
-      const c = o.parentElement.getBoundingClientRect();
-      let maxBottom = c.top;
-      let minTop = Infinity;
-      for (const s of segs) {
-        const r = s.getBoundingClientRect();
-        if (r.bottom > maxBottom) maxBottom = r.bottom;
-        if (r.top < minTop) minTop = r.top;
-      }
-      if (settings.subPosition === 'above') {
-        const h = o.offsetHeight || 24;
-        o.style.top = (minTop - c.top - h - 6) + 'px';
-      } else {
-        o.style.top = Math.max(0, maxBottom - c.top + 6) + 'px';
-      }
-    }
+    const o = attachOverlay();
     if (!o) return;
+    const player = getPlayer();
+    if (!player) return;
     o.textContent = text;
     const fs = parseFloat(getComputedStyle(segs && segs.length ? segs[0] : document.querySelector('.ytp-caption-segment') || document.body).fontSize);
     if (fs) o.style.fontSize = (fs * (SCALES[settings.subScale] || 0.9)) + 'px';
+    const pr = player.getBoundingClientRect();
+    if (playerAnchor || !segs || !segs.length) {
+      o.style.top = 'auto';
+      o.style.bottom = '24px';
+    } else if (settings.subPosition === 'above') {
+      let minTop = Infinity;
+      for (const s of segs) {
+        const r = s.getBoundingClientRect();
+        if (r.top < minTop) minTop = r.top;
+      }
+      o.style.bottom = 'auto';
+      o.style.top = Math.max(0, minTop - pr.top - (o.offsetHeight || 24) - 6) + 'px';
+    } else {
+      let maxBottom = -Infinity;
+      for (const s of segs) {
+        const r = s.getBoundingClientRect();
+        if (r.bottom > maxBottom) maxBottom = r.bottom;
+      }
+      o.style.top = 'auto';
+      o.style.bottom = Math.max(6, pr.bottom - maxBottom + 6) + 'px';
+    }
     o.style.display = 'block';
   }
 
@@ -180,15 +213,19 @@
   }
 
   function renderCue() {
+    
     if (!trackReady || !settings.subtitleEnabled) { hideOverlay(); return; }
     const video = document.querySelector('video');
     if (!video) { hideOverlay(); return; }
-    const cue = currentCue(video.currentTime * 1000);
+    const timeMs = video.currentTime * 1000;
+    const cue = currentCue(timeMs);
     if (!cue || !cue.trans) {
       hideOverlay();
       lastCueKey = '';
+      translateUntil(timeMs);
       return;
     }
+    translateUntil(timeMs);
     if (cue.text === lastCueKey) return;
     lastCueKey = cue.text;
     if (getVisibleSegments().length > 0) {
@@ -217,29 +254,29 @@
       if (!cues.length) return;
       cueMap.length = 0;
       cueMap.push(...cues);
+      groups.length = 0;
+      const GROUP = 5;
+      for (let i = 0; i < cues.length; i += GROUP) groups.push(cues.slice(i, i + GROUP));
+      waveIdx = 0;
       trackReady = true;
       attachTimeListener();
-      const GROUP = 5;
-      const groups = [];
-      for (let i = 0; i < cues.length; i += GROUP) groups.push(cues.slice(i, i + GROUP));
-      let gi = 0;
-      const worker = async () => {
-        while (gi < groups.length) {
-          const g = groups[gi++];
-          const texts = g.map(c => c.text);
-          try {
-            const tr = await sendTranslate(texts);
-            g.forEach((c, j) => { c.trans = (tr && tr[j]) || ''; });
-          } catch (e) {}
-        }
-      };
-      await Promise.all(Array.from({ length: 2 }, worker));
+      translateUntil(document.querySelector('video') ? document.querySelector('video').currentTime * 1000 : 0);
       renderCue();
     } catch (e) {
     } finally {
       trackBusy = false;
     }
   }
+
+  window.__FT_SUB_STATE__ = () => ({
+    ready: trackReady,
+    cues: cueMap.length,
+    translated: cueMap.filter(c => c.trans).length,
+    waveIdx,
+    groups: groups.length,
+    translating,
+
+  });
 
   window.addEventListener('message', e => {
     if (e.source !== window || !e.data) return;
