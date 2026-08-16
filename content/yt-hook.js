@@ -3,34 +3,18 @@
   window.__FT_YTHOOK__ = true;
 
   const SUB_RE = /(^|\/)(api\/timedtext|timedtext)(\?|$)/i;
-  let reqId = 0;
-  const pending = new Map();
-
-  window.addEventListener('message', e => {
-    if (e.source !== window || !e.data || e.data.__ft !== 'sub-res') return;
-    const cb = pending.get(e.data.id);
-    if (cb) {
-      pending.delete(e.data.id);
-      cb(e.data.text);
-    }
-  });
 
   function isSubtitleUrl(url) {
     return typeof url === 'string' && SUB_RE.test(url);
   }
 
-  function requestTranslation(url) {
-    const id = ++reqId;
-    return new Promise(resolve => {
-      pending.set(id, resolve);
-      window.postMessage({ __ft: 'sub-req', id, url }, '*');
-      setTimeout(() => {
-        if (pending.has(id)) {
-          pending.delete(id);
-          resolve(null);
-        }
-      }, 8000);
-    });
+  function extractPayload(xhr) {
+    try {
+      if (xhr.responseText) return xhr.responseText;
+      if (typeof xhr.response === 'string') return xhr.response;
+      if (xhr.response) return JSON.stringify(xhr.response);
+    } catch (e) {}
+    return null;
   }
 
   const origOpen = XMLHttpRequest.prototype.open;
@@ -45,16 +29,16 @@
   XMLHttpRequest.prototype.send = function() {
     const url = this.__ftUrl;
     if (isSubtitleUrl(url)) {
-      const args = arguments;
-      return requestTranslation(url).then(text => {
-        if (text) {
+      try {
+        this.addEventListener('loadend', () => {
           try {
-            Object.defineProperty(this, 'responseText', { get: () => text, configurable: true });
-            Object.defineProperty(this, 'response', { get: () => text, configurable: true });
+            if (this.status === 200) {
+              const payload = extractPayload(this);
+              if (payload) window.postMessage({ __ft: 'sub-track', url, text: payload }, '*');
+            }
           } catch (e) {}
-        }
-        return origSend.apply(this, args);
-      });
+        });
+      } catch (e) {}
     }
     return origSend.apply(this, arguments);
   };
@@ -64,16 +48,15 @@
     window.fetch = function(input, init) {
       const url = typeof input === 'string' ? input : (input && (input.url || input.href)) || '';
       if (isSubtitleUrl(url)) {
-        return requestTranslation(url).then(text => {
-          if (text) {
-            return new Response(text, {
-              status: 200,
-              statusText: 'OK',
-              headers: { 'Content-Type': 'application/json' }
-            });
-          }
-          return origFetch.apply(this, arguments);
-        });
+        const p = origFetch.apply(this, arguments);
+        p.then(res => {
+          try {
+            res.clone().text().then(t => {
+              if (t) window.postMessage({ __ft: 'sub-track', url, text: t }, '*');
+            }).catch(() => {});
+          } catch (e) {}
+        }).catch(() => {});
+        return p;
       }
       return origFetch.apply(this, arguments);
     };

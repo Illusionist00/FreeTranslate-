@@ -23,7 +23,7 @@
 
   const style = document.createElement('style');
   style.textContent = `
-    .ft-sub-overlay { position: absolute; left: 0; right: 0; text-align: center; color: #ffe97a; font-family: "YouTube Noto", Roboto, Arial, sans-serif; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9); pointer-events: none; z-index: 25; white-space: normal; line-height: 1.35; display: none; }
+    .ft-sub-overlay { position: absolute; left: 0; right: 0; text-align: center; color: #ffd24a; font-family: "YouTube Noto", Roboto, Arial, sans-serif; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95); pointer-events: none; z-index: 25; white-space: normal; line-height: 1.35; display: none; }
     .ft-yt-btn { color: #fff !important; font-size: 18px; font-weight: 700; width: 46px; height: 100%; display: inline-flex !important; align-items: center; justify-content: center; line-height: 1; padding: 0 !important; margin: 0 !important; border: none; background: none; vertical-align: middle; }
     .ft-yt-btn.ft-sub-on { color: #3ea6ff !important; }
     .ytp-autohide .ft-yt-popup { display: none !important; }
@@ -73,7 +73,11 @@
   let stabTimer = null;
   let ytBtn = null;
   let ytPopup = null;
-  let nativeActive = false;
+  let lastCueKey = '';
+
+  const cueMap = [];
+  let trackReady = false;
+  let trackBusy = false;
 
   function baseLang(code) {
     return String(code || '').toLowerCase().split('-')[0];
@@ -87,70 +91,12 @@
     }
   }
 
-  async function translateBatch(texts) {
-    const out = new Array(texts.length).fill('');
-    const CHUNK = 40;
-    let ci = 0;
-    const worker = async () => {
-      while (ci < texts.length) {
-        const i = ci;
-        ci += CHUNK;
-        const slice = texts.slice(i, i + CHUNK);
-        try {
-          const tr = await sendTranslate(slice);
-          slice.forEach((t, j) => { out[i + j] = (tr && tr[j]) || ''; });
-        } catch (e) {}
-      }
-    };
-    await Promise.all(Array.from({ length: 3 }, worker));
-    return out;
-  }
-
-  function replySubReq(id, text) {
-    window.postMessage({ __ft: 'sub-res', id, text }, '*');
-  }
-
-  async function handleSubRequest(id, url) {
-    try {
-      const trackLang = langOf(url);
-      if (trackLang && baseLang(trackLang) === baseLang(settings.targetLang)) {
-        replySubReq(id, null);
-        return;
-      }
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('http ' + res.status);
-      const data = await res.json();
-      if (!data || !Array.isArray(data.events)) throw new Error('not json3');
-      const cues = [];
-      data.events.forEach(ev => {
-        const t = (ev.segs || []).map(s => s.utf8 || '').join('\n');
-        if (t.trim()) cues.push(t);
-      });
-      if (!cues.length) throw new Error('no cues');
-      const translations = await translateBatch(cues);
-      let ti = 0;
-      data.events.forEach(ev => {
-        const t = (ev.segs || []).map(s => s.utf8 || '').join('\n');
-        if (!t.trim()) return;
-        const tr = translations[ti++];
-        if (!tr) return;
-        ev.segs = [{ utf8: settings.subPosition === 'above' ? tr + '\n' + t : t + '\n' + tr }];
-      });
-      nativeActive = true;
-      hideOverlay();
-      replySubReq(id, JSON.stringify(data));
-    } catch (e) {
-      replySubReq(id, null);
-    }
-  }
-
-  window.addEventListener('message', e => {
-    if (e.source !== window || !e.data || e.data.__ft !== 'sub-req') return;
-    handleSubRequest(e.data.id, e.data.url);
-  });
-
   function getContainer() {
     return document.querySelector('.ytp-caption-window-container');
+  }
+
+  function getPlayer() {
+    return document.querySelector('.html5-video-player');
   }
 
   function getVisibleSegments() {
@@ -161,13 +107,6 @@
       if (r.width > 0 && r.height > 0) out.push(s);
     }
     return out;
-  }
-
-  function getVisibleText() {
-    return getVisibleSegments()
-      .map(s => (s.textContent || '').replace(/\s+/g, ' ').trim())
-      .filter(Boolean)
-      .join(' ');
   }
 
   function ensureOverlay() {
@@ -181,41 +120,139 @@
     return overlay;
   }
 
-  function showOverlay(text, segs) {
-    const o = ensureOverlay();
+  function showOverlay(text, segs, playerAnchor) {
+    let o = overlay;
+    if (playerAnchor) {
+      const player = getPlayer();
+      if (!player) return;
+      if (!(overlay && overlay.parentElement === player)) {
+        if (overlay) overlay.remove();
+        overlay = document.createElement('div');
+        overlay.className = 'ft-sub-overlay';
+        overlay.style.top = 'auto';
+        overlay.style.bottom = '24px';
+        player.appendChild(overlay);
+      }
+      o = overlay;
+    } else {
+      o = ensureOverlay();
+      if (!o) return;
+      o.style.bottom = 'auto';
+      const c = o.parentElement.getBoundingClientRect();
+      let maxBottom = c.top;
+      let minTop = Infinity;
+      for (const s of segs) {
+        const r = s.getBoundingClientRect();
+        if (r.bottom > maxBottom) maxBottom = r.bottom;
+        if (r.top < minTop) minTop = r.top;
+      }
+      if (settings.subPosition === 'above') {
+        const h = o.offsetHeight || 24;
+        o.style.top = (minTop - c.top - h - 6) + 'px';
+      } else {
+        o.style.top = Math.max(0, maxBottom - c.top + 6) + 'px';
+      }
+    }
     if (!o) return;
     o.textContent = text;
-    if (segs.length) {
-      const fs = parseFloat(getComputedStyle(segs[0]).fontSize);
-      if (fs) o.style.fontSize = (fs * (SCALES[settings.subScale] || 0.9)) + 'px';
-    }
+    const fs = parseFloat(getComputedStyle(segs && segs.length ? segs[0] : document.querySelector('.ytp-caption-segment') || document.body).fontSize);
+    if (fs) o.style.fontSize = (fs * (SCALES[settings.subScale] || 0.9)) + 'px';
     o.style.display = 'block';
-    const c = o.parentElement.getBoundingClientRect();
-    let maxBottom = c.top;
-    let minTop = Infinity;
-    for (const s of segs) {
-      const r = s.getBoundingClientRect();
-      if (r.bottom > maxBottom) maxBottom = r.bottom;
-      if (r.top < minTop) minTop = r.top;
-    }
-    if (settings.subPosition === 'above') {
-      const h = o.offsetHeight || 24;
-      o.style.top = (minTop - c.top - h - 6) + 'px';
-    } else {
-      o.style.top = Math.max(0, maxBottom - c.top + 6) + 'px';
-    }
   }
 
   function hideOverlay() {
     if (overlay) overlay.style.display = 'none';
   }
 
+  function attachTimeListener() {
+    const video = document.querySelector('video');
+    if (!video || video.__ftTimeBound) return;
+    video.__ftTimeBound = true;
+    video.addEventListener('timeupdate', renderCue);
+    video.addEventListener('seeked', renderCue);
+  }
+
+  function currentCue(timeMs) {
+    for (const c of cueMap) {
+      if (timeMs >= c.start && timeMs < c.end) return c;
+    }
+    return null;
+  }
+
+  function renderCue() {
+    if (!trackReady || !settings.subtitleEnabled) { hideOverlay(); return; }
+    const video = document.querySelector('video');
+    if (!video) { hideOverlay(); return; }
+    const cue = currentCue(video.currentTime * 1000);
+    if (!cue || !cue.trans) {
+      hideOverlay();
+      lastCueKey = '';
+      return;
+    }
+    if (cue.text === lastCueKey) return;
+    lastCueKey = cue.text;
+    if (getVisibleSegments().length > 0) {
+      showOverlay(cue.trans, getVisibleSegments(), false);
+    } else {
+      showOverlay(cue.text + '\n' + cue.trans, null, true);
+    }
+  }
+
+  async function handleTrack(url, text) {
+    if (!settings.subtitleEnabled) return;
+    if (trackBusy) return;
+    trackBusy = true;
+    try {
+      const trackLang = langOf(url);
+      if (trackLang && baseLang(trackLang) === baseLang(settings.targetLang)) return;
+      const data = JSON.parse(text);
+      if (!data || !Array.isArray(data.events)) return;
+      const cues = [];
+      data.events.forEach(ev => {
+        const t = (ev.segs || []).map(s => s.utf8 || '').join(' ').replace(/\s+/g, ' ').trim();
+        if (!t.trim()) return;
+        if (/^[♪♫#\s]+$/.test(t)) return;
+        cues.push({ start: ev.tStartMs || 0, end: (ev.tStartMs || 0) + (ev.dDurationMs || 3000), text: t });
+      });
+      if (!cues.length) return;
+      cueMap.length = 0;
+      cueMap.push(...cues);
+      trackReady = true;
+      attachTimeListener();
+      const GROUP = 5;
+      const groups = [];
+      for (let i = 0; i < cues.length; i += GROUP) groups.push(cues.slice(i, i + GROUP));
+      let gi = 0;
+      const worker = async () => {
+        while (gi < groups.length) {
+          const g = groups[gi++];
+          const texts = g.map(c => c.text);
+          try {
+            const tr = await sendTranslate(texts);
+            g.forEach((c, j) => { c.trans = (tr && tr[j]) || ''; });
+          } catch (e) {}
+        }
+      };
+      await Promise.all(Array.from({ length: 2 }, worker));
+      renderCue();
+    } catch (e) {
+    } finally {
+      trackBusy = false;
+    }
+  }
+
+  window.addEventListener('message', e => {
+    if (e.source !== window || !e.data) return;
+    if (e.data.__ft === 'sub-track') handleTrack(e.data.url, e.data.text);
+  });
+
   function tick() {
     ensureButton();
-    if (nativeActive) return;
+    attachTimeListener();
     if (!settings.subtitleEnabled) { hideOverlay(); return; }
+    if (trackReady) { renderCue(); return; }
     const segs = getVisibleSegments();
-    const text = getVisibleText();
+    const text = segs.map(s => (s.textContent || '').replace(/\s+/g, ' ').trim()).filter(Boolean).join(' ');
     if (!text) {
       hideOverlay();
       lastTickText = '';
@@ -232,8 +269,8 @@
     if (text !== shownSource) {
       translateCached(text).then(tr => {
         if (!tr || !settings.subtitleEnabled) return;
-        if (text !== getVisibleText()) return;
-        showOverlay(tr, getVisibleSegments());
+        if (text !== getVisibleSegments().map(s => (s.textContent || '').replace(/\s+/g, ' ').trim()).filter(Boolean).join(' ')) return;
+        showOverlay(tr, getVisibleSegments(), false);
         shownSource = text;
       });
     }
@@ -272,7 +309,7 @@
   }
 
   function buildPopup() {
-    const player = document.querySelector('.html5-video-player');
+    const player = getPlayer();
     if (!player || (ytPopup && ytPopup.isConnected)) return;
     ytPopup = document.createElement('div');
     ytPopup.className = 'ft-yt-popup';
